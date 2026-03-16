@@ -1,0 +1,613 @@
+import numpy as np
+import pandas as pd 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.graph_objects as go
+from dash import Dash, dcc, html, Input, Output
+import plotly.express as px
+
+
+# Loading the dataset
+df = pd.read_csv("udemy_output_All_Finance__Accounting.csv")
+
+# # Data cleaning and preparation 
+
+# Dropping Unnecessary Columns
+# avg_rating, avg_rating_recent, discount_price__price_string price_detail__price_string, discount_price__currency, price_detail__currency, url
+
+df.drop(columns = ['avg_rating', 'avg_rating_recent', 'discount_price__price_string', 'price_detail__price_string', 'discount_price__currency', 'price_detail__currency', 'url'], inplace=True, axis=1)
+
+
+# Check the dataset again 
+df.info()
+
+# Check on the dataset statistical information 
+df.describe()
+
+#Data Cleaning
+df['created'] = pd.to_datetime(df['created']) # Converted to datetime format 
+df['published_time'] = pd.to_datetime(df['published_time']) # Converted into datetime format, for later manipulation and visualisation 
+df['Year'] = df['published_time'].dt.year
+
+# Currency Conversion to USD
+# converted the currency from INR to USD in the following columns:
+# 
+# discount_price__amount: Multiplied the actual data by 0,012 to convert from INR to USD
+# price_detail__amount: Multiplied the actual data by 0,012 to convert from INR to USD
+# This conversion was done by multiplying the actual data by 0,012 the conversion factor of USD
+
+# Currency conversion to USD: Converted from INR to USD by multiplied by 0.012 (the exchange rate in 23.11.2024)
+df['discount_price__amount'] = df['discount_price__amount'] * (0.012) 
+df['price_detail__amount'] = df['price_detail__amount'] * (0.012)
+
+
+# New variables create : Discounted percentage
+#Create new variables: Discounted percentage
+df['Discount_Percentage'] = ((df['price_detail__amount'] - df['discount_price__amount']) / df['price_detail__amount']) * 100
+df['Discount_Percentage'] = 100 - df['Discount_Percentage']
+
+
+# Imputation of Missing Values: 
+# Missing values were imputed in each column using an appropriate method, such as mean, median, or mode.
+from sklearn.impute import SimpleImputer
+imputer = SimpleImputer(strategy='median')
+columns_to_impute = ['discount_price__amount', 'Discount_Percentage', 'price_detail__amount']
+df[columns_to_impute] = imputer.fit_transform(df[columns_to_impute])
+
+# Title cleaning 
+
+
+# Title Cleaning for: Set up lower case and strip and replace the uneccessary characters in the titles
+#df['title'] = df['title'].str.lower()
+#df['title'] = df['title'].str.strip().replace(r'\s+', ' ', regex=True)
+#df['title'] = df['title'].str.replace(r'[^\w\s]', '', regex=True)
+df.head()
+
+# Category the course
+
+# Project Management: Courses related to Agile, Scrum, PMP, or project management methodologies.
+
+# Personal Finance: "personal finance", "budgeting", "saving", "retirement".
+
+# Investment Banking: "investment banking", "investment bank".
+
+# Finance Fundamentals: "finance fundamentals", "introduction to finance".
+
+# Banking: "banking", "loans", "credit".
+
+# Corporate Finance: "corporate finance", "financial modeling".
+
+# CFA (Chartered Financial Analyst): "cfa", "chartered financial analyst".
+
+# Financial Analysis: "financial analysis", "analysis".
+
+# Financial Management: "financial management", "management finance".
+
+# Technical Analysis (Finance): "technical analysis", "stock market", "charting".
+
+# Accounting: "accounting", "bookkeeping", "audit".
+
+# Data Science: Courses related to data science, analytics, or machine learning.
+
+# Management: Courses related to general management principles.
+
+# Leadership: Courses related to leadership skills.
+
+# Communication: Courses related to communication skills.
+
+# Any courses that do not fit into these specific categories are categorized as 'Other'.
+
+# Categorize the title based on the course name
+def categorize_title(title):
+    title_lower = title.lower()
+    if 'personal finance' in title_lower or 'budgeting' in title_lower or 'saving' in title_lower or 'retirement' in title_lower:
+        return 'Personal Finance'
+    elif 'investment banking' in title_lower or 'investment bank' in title_lower:
+        return 'Investment Banking'
+    elif 'banking' in title_lower or 'loans' in title_lower or 'credit' in title_lower:
+        return 'Banking'
+    elif any(kw in title_lower for kw in ['agile', 'scrum', 'pmp', 'project management']):
+        return 'Project Management'
+    elif any(kw in title_lower for kw in ['cfa', 'chartered financial analyst']):
+        return 'CFA (Chartered Financial Analyst)'
+    elif 'financial analysis' in title_lower or 'analysis' in title_lower:
+        return 'Financial Analysis'
+    elif 'financial management' in title_lower or 'management finance' in title_lower:
+        return 'Financial Management'
+    elif 'technical analysis' in title_lower or 'stock market' in title_lower or 'charting' in title_lower:
+        return 'Technical Analysis (Finance)'
+    elif 'accounting' in title_lower or 'bookeeping' in title_lower or 'audit' in title_lower:
+        return 'Accounting'
+    elif any(kw in title_lower for kw in ['data science', 'analytics', 'machine learning']):
+        return 'Data Science'
+    elif 'management' in title_lower:
+        return 'Management'
+    elif 'leadership' in title_lower:
+        return 'Leadership'
+    elif 'communication' in title_lower:
+        return 'Communication'
+    else:
+        return 'Other'
+
+
+df['category'] = df['title'].apply(categorize_title)
+
+
+df['category'].value_counts()
+
+
+# Actual earning calculation: 
+df['Acutal earning'] = df['num_subscribers'] * df['discount_price__amount']
+df["Rating"] = df["rating"]
+
+# # Top 5 Courses by Subscribers
+
+# Sort by 'num_subscribers' in ascending order
+top_subscribers = df.nlargest(10, 'num_subscribers').sort_values('num_subscribers', ascending=True)
+top_subscribers = top_subscribers.sort_values(by='num_subscribers', ascending=True).head(5)
+
+# Create shortened titles for y-axis with a 30-character limit and ellipses
+top_subscribers['wrapped_title'] = top_subscribers['title'].apply(
+    lambda x: x[:20] + '...' if len(x) > 20 else x  # Truncate to 30 characters and add '...'
+)
+# Create the color range for revenue
+custom_color_scale = [
+    [0.0, "#C8b3f6"], # pastel purple
+    [1.0, "#2D1C7F"] # dark purple
+]
+# Create the bar chart with hovertemplate for custom tooltips
+fig1 = px.bar(
+    top_subscribers,
+    x='num_subscribers',
+    y='wrapped_title',  # Use truncated titles for y-axis
+    orientation='h',
+    color='Acutal earning',
+    labels={'num_subscribers': 'Subscribers', 'wrapped_title': ''},
+    color_continuous_scale=custom_color_scale  
+)
+
+# Customize hover annotations
+fig1.update_traces(
+    hovertemplate=(
+        "<b>Title:</b> %{y}<br>"  # Y-axis value (shortened title)
+        "<b>Subscribers:</b> %{x}<br>"  # X-axis value (number of subscribers)
+        "<b> Revenue:</b> %{marker.color:.2f}<extra></extra>"  # Color (rating) formatted to 2 decimal places
+    )
+)
+fig1.update_layout(
+    coloraxis_colorbar=dict(
+        title="Revenue" # Custom labels for tick marks
+    ))
+
+# Plot 2: Lecture vs Review (Scatter Plot)
+# Color range for rating 
+accessible_color_scale = [
+    [0.0, "#A30E28"],
+    [0.25, "#A65665"],   # red
+    [0.5, "#ecc3a5"],   # Light Yellow (neutral)
+    [0.75, "#774972"],
+    [1.0, "#2D1C7F"]    # purple
+]
+fig2 = px.scatter(
+    df,
+    x='num_published_lectures',
+    y='num_reviews',
+    color='Rating',
+    labels={'num_published_lectures': 'Number of Lectures', 'num_reviews': 'Number of Reviews'},
+    color_continuous_scale= accessible_color_scale
+
+)
+
+# Show the trendline equation in hover text
+fig2.update_traces(
+    customdata=df[['title']].values,
+    marker=dict(size=10),
+    hovertemplate=(
+        "<b> Title:</b> %{customdata[0]}<br>" 
+        "<b> Number of Lectures:</b> %{y}<br>"  # Y-axis value (shortened title)
+        "<b> Number of review:</b> %{x}<br>"  # X-axis value (number of subscribers)
+        "<b> Rating:</b> %{marker.color:.2f}<extra></extra>") # Adjust marker size
+)
+fig2.update_layout(
+    yaxis=dict(
+        title="Number of Reviews",  # Y-axis title
+        dtick=10000,       # Tick intervals of 10,000
+        tickformat=',',    # Format ticks with commas for clarity
+    )
+)
+
+fig2.show()
+
+# Initialize Dash app
+app = Dash(__name__)
+
+# App layout
+app.layout = html.Div([
+    html.H1("Prefered Price of Students", style={'textAlign': 'center'}),
+    
+    # Slider for filtering money range
+    dcc.RangeSlider(
+        id='money-range-slider',
+        min=0,
+        max=50,
+        step=1,
+        value=[0, 50],  # Initial range: full range
+        marks={i: f"${i}" for i in range(0, 51, 10)},  # Marks every $10
+        tooltip={"placement": "bottom", "always_visible": True}
+    ),
+    
+    # Bar chart for pricing preferences
+    dcc.Graph(id='pricing-bar-chart')
+])
+
+# Callback to update chart based on slider range
+@app.callback(
+    Output('pricing-bar-chart', 'figure'),
+    Input('money-range-slider', 'value')  # Input from the slider
+)
+def update_chart(selected_range):
+    # Filter data within the selected range
+    filtered_df = df[
+        (df['discount_price__amount'] >= selected_range[0]) &
+        (df['discount_price__amount'] <= selected_range[1])
+    ]
+    
+    # Dynamically create 5 bins within the selected range
+    bin_size = (selected_range[1] - selected_range[0]) / 10  # Ensure 5 bins
+    bins = np.arange(selected_range[0], selected_range[1] + bin_size, bin_size)
+    bin_labels = [f"${bins[i]:.2f}-${bins[i+1]:.2f}" for i in range(len(bins)-1)]
+    
+    filtered_df['Cluster'] = pd.cut(
+        filtered_df['discount_price__amount'], bins=bins, labels=bin_labels, include_lowest=True
+    )
+    
+    # Count the number of students in each bin
+    cluster_counts = filtered_df['Cluster'].value_counts().sort_index()
+
+    # Create the bar chart
+    fig = px.bar(
+        x=cluster_counts.index.astype(str),  # Convert bins to string for x-axis
+        y=cluster_counts.values,
+        labels={'x': 'Investment Range ($)', 'y': 'Number of Students'}, 
+        color_discrete_map="#A65665"
+    )
+    
+    # Add percentage labels to each bar
+    fig.update_traces(
+        color="#A65665",
+        text=[f"{val:.1f}%" for val in (cluster_counts / cluster_counts.sum() * 100)],
+        textposition='outside'  # Position labels outside the bars
+    )
+    return fig
+
+
+# Plot 4: Discounted Price vs Actual Earnings (Scatter Plot)
+fig4 = px.scatter(
+    df,
+    x='discount_price__amount',
+    y='Acutal earning',
+    size='num_subscribers',
+    labels={'discount_price__amount': 'Discounted Price', 'Acutal earning': 'Earnings'},
+    hover_data={'title': True, "price_detail__amount": True }
+)
+
+# Update layout for y-axis clustering
+fig4.update_layout(
+    yaxis=dict(
+        title="Earnings",  # Add y-axis title
+        dtick=200000,  # Set tick interval to 200,000 (0.2M)
+        range=[0, 2200000],  # Adjust range to fit your data
+        tickformat=','  # Use commas in tick labels
+    ),
+    xaxis=dict(
+        title="Discounted Price"  # Add x-axis title
+    )
+)
+
+
+# Update the bubble size and color
+fig4.update_traces(
+    customdata=df[['title', 'price_detail__amount']].values,  # Add custom data
+    marker=dict(
+        color='#c8b3f6',  # Set bubble color
+        sizemode='area',  # Make bubble size proportional to area
+        sizeref=2.*max(df['num_subscribers'])/(4000)  # Adjust size scaling
+    ),
+    hovertemplate=(
+        "<b> Title: </b> %{customdata[0]}<br>"  # Use the first element of customdata (title)
+        "<b> Revenue:</b> %{y}<br>"  # Y-axis value
+        "<b> Discounted Price:</b> %{x}<br>"  # X-axis value
+        "<b> Normal Price:</b> %{customdata[1]}<extra></extra>"  # Use the second element of customdata (price_detail__amount)
+    )
+)
+
+fig4.show()
+
+
+
+# Extract year
+df['Year'] = df['published_time'].dt.year
+
+# Group revenue by category and time (change to Year or Quarter for clarity)
+revenue_trends = df.groupby(['Year', 'category'])['Acutal earning'].sum().reset_index()
+
+# Calculate percentage contribution within each year
+revenue_trends['Percentage'] = revenue_trends.groupby('Year')['Acutal earning'].transform(lambda x: (x / x.sum() * 100))
+revenue_trends['Percentage'] = revenue_trends['Percentage'].round(2)  # Round to 2 decimal places
+
+# Limit to top 5 categories by total revenue
+top_categories = revenue_trends.groupby('category')['Acutal earning'].sum().nlargest(5).index
+filtered_df = revenue_trends[revenue_trends['category'].isin(top_categories)]
+
+color_map = {
+    'Other': '#7546E8', 
+    'Accounting': '#DEC1DB',
+    'Data Science': '#EEE2DF',
+    'Financial Analysis': '#B0A9E5',
+    'Project Management': '#2F80E4'   # Example for another color, adjust as needed
+}
+
+# Create a stacked bar chart with percentage in hover
+fig = px.bar(
+    filtered_df,
+    x='Year',
+    y='Acutal earning',
+    color='category',
+    labels={'Acutal earning': 'Total Revenue', 'Year': 'Year', 'category': 'Course Category'},
+    hover_data={'Acutal earning': True, 'Percentage': True}, 
+    color_discrete_map=color_map
+)
+
+# Update layout for readability
+fig.update_layout(
+    xaxis=dict(title='Year'),
+    yaxis=dict(title='Total Revenue'),
+    legend=dict(title='Course Category'),
+    bargap=0.1  # Adjust spacing between bars
+)
+# Update hover template with custom data
+fig.update_traces(
+    hovertemplate=(
+        "<b>Percentage:</b> %{customdata[0]}<br>"  # First element: Category
+        "<b>Revenue:</b> %{y}<br>"  # Revenue (y-axis)
+    )
+)
+fig.show()
+
+
+
+# # Students Engagement Analysis
+
+
+app.layout = html.Div([
+    html.H2("Students Engagement Analysis", style={'textAlign': 'center'}),
+
+    # Dropdown filter to choose between "Lecture" and "Review"
+    dcc.Dropdown(
+        id='filter-dropdown',
+        options=[
+            {'label': 'Number of Lectures', 'value': 'num_published_lectures'},
+            {'label': 'Number of Reviews', 'value': 'num_reviews'}
+        ],
+        value='num_published_lectures',  # Default value
+        style={'width': '50%', 'margin': '0 auto'}
+    ),
+
+    # Scatter plot
+    dcc.Graph(id='combined-scatter-plot')
+])
+
+# Callback to update scatter plot based on dropdown selection
+@app.callback(
+    Output('combined-scatter-plot', 'figure'),
+    Input('filter-dropdown', 'value')
+)
+def update_plot(selected_column):
+    y_label = 'Number of Students'
+
+    # Create the scatter plot
+    fig = px.scatter(
+        df,
+        x=selected_column,
+        y='num_subscribers',
+        color='Rating',
+        labels={selected_column: title_map[selected_column], 'num_subscribers': y_label},
+        hover_data={'title': True,'num_reviews': True, 'num_published_lectures': True, 'Rating': True},
+        color_continuous_scale= accessible_color_scale)
+
+    # Adjust layout
+    fig.update_layout(
+        xaxis=dict(title=title_map[selected_column]),
+        yaxis=dict(title=y_label, range=[0, 400000]),
+        coloraxis_colorbar=dict(title="Rating")
+    )
+
+    return fig
+
+# # Dashboard layout
+
+# Initialize Dash app
+app = Dash(__name__)
+
+# Layout for the combined dashboard
+app.layout = html.Div([
+    html.H1("Udemy Finance and Accounting Course Dashboard", style={'textAlign': 'center'}),
+
+    # Section 1: Top 5 Courses by Subscribers
+    html.Div([
+        html.H3("Top 5 Courses by Subscribers"),
+        dcc.Graph(id='top-subscribers-chart', figure=fig1)
+    ]),
+
+    # Section 2: Lecture vs Review Scatter Plot
+    html.Div([
+        html.H3("Lecture vs Review"),
+        dcc.Graph(id='lecture-vs-review-chart', figure=fig2)
+    ]),
+
+    # Section 3: Pricing Preference with Slider Filter
+    html.Div([
+        html.H3("Pricing Preference of Students"),
+        dcc.RangeSlider(
+            id='money-range-slider',
+            min=0,
+            max=50,
+            step=1,
+            value=[0, 50],
+            marks={i: f"${i}" for i in range(0, 51, 10)},
+            tooltip={"placement": "bottom", "always_visible": True}
+        ),
+        dcc.Graph(id='pricing-bar-chart')  # Slider callback updates this chart
+    ]),
+
+    # Section 4: Discounted Price vs Actual Earnings
+    html.Div([
+        html.H3("Discounted Price vs Actual Earnings"),
+        dcc.Graph(id='price-vs-earnings-chart', figure=fig4)
+    ]),
+
+    # Section 5: Revenue Trends by Top Categories
+    html.Div([
+        html.H3("Revenue Trends by Top Categories"),
+        dcc.Graph(id='revenue-trends-chart', figure=fig)
+    ]),
+
+    # Section 6: Students Engagement Analysis with filter 
+    html.Div([
+        html.H3("Students Engagement Analysis"),
+        dcc.Dropdown(
+            id='filter-dropdown',
+            options=[
+                {'label': 'Number of Lectures', 'value': 'num_published_lectures'},
+                {'label': 'Number of Reviews', 'value': 'num_reviews'}
+            ],
+            value='num_published_lectures',  # Default value
+            style={'width': '50%', 'margin': '0 auto'}
+        ),
+        dcc.Graph(id='combined-scatter-plot')
+    ])
+])
+
+# Callback for Pricing Preference chart
+@app.callback(
+    Output('pricing-bar-chart', 'figure'),
+    Input('money-range-slider', 'value')
+)
+def update_chart(selected_range):
+    filtered_df = df[
+        (df['discount_price__amount'] >= selected_range[0]) &
+        (df['discount_price__amount'] <= selected_range[1])
+    ]
+    bin_size = (selected_range[1] - selected_range[0]) / 5
+    bins = np.arange(selected_range[0], selected_range[1] + bin_size, bin_size)
+    bin_labels = [f"${bins[i]:.2f}-${bins[i+1]:.2f}" for i in range(len(bins)-1)]
+    filtered_df['Cluster'] = pd.cut(filtered_df['discount_price__amount'], bins=bins, labels=bin_labels, include_lowest=True)
+    cluster_counts = filtered_df['Cluster'].value_counts().sort_index()
+    fig = px.bar(
+        x=cluster_counts.index.astype(str),
+        y=cluster_counts.values,
+        labels={'x': 'Investment Range ($)', 'y': 'Number of Students'}
+    )
+    fig.update_traces(
+        marker_color='#c8b3f6',
+        text=[f"{val:.1f}%" for val in (cluster_counts / cluster_counts.sum() * 100)],
+                      textposition='outside')
+    return fig
+
+# Callback for Students Engagement Analysis
+@app.callback(
+    Output('combined-scatter-plot', 'figure'),
+    Input('filter-dropdown', 'value')
+)
+def update_plot(selected_column):
+    title_map = {'num_published_lectures': 'Number of Lectures', 'num_reviews': 'Number of Reviews'}
+    y_label = 'Number of Students'
+    fig = px.scatter(
+        df,
+        x=selected_column,
+        y='num_subscribers',
+        color='Rating',
+        title=f"Students vs {title_map[selected_column]}",
+        labels={selected_column: title_map[selected_column], 'num_subscribers': y_label},
+        hover_data={'title': True,'num_reviews': True, 'num_published_lectures': True, 'Rating': True},
+        color_continuous_scale= accessible_color_scale    
+        )
+    fig.update_layout(
+        xaxis=dict(title=title_map[selected_column]),
+        yaxis=dict(title=y_label, range=[0, 400000])
+    )
+    return fig
+
+
+
+# Updated Layout for Combined Dashboard
+app.layout = html.Div([
+    html.H1("Udemy Finance and Accounting Course Dashboard", style={'textAlign': 'center'}),
+
+    # First Row: Top 5 Courses & Lecture vs Review
+    html.Div([
+        html.Div([
+            html.H3("Top 5 Courses by Subscribers"),
+            dcc.Graph(id='top-subscribers-chart', figure=fig1)
+        ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+
+        html.Div([
+            html.H3("Lecture vs Review"),
+            dcc.Graph(id='lecture-vs-review-chart', figure=fig2)
+        ], style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top'})
+    ], style={'display': 'flex', 'justify-content': 'space-around'}),
+
+    # Second Row: Pricing Preference, Discounted Price vs Actual Earnings, and Revenue Trends
+    html.Div([
+        # Pricing Preference
+        html.Div([
+            html.H3("Pricing Preference of Students"),
+            dcc.RangeSlider(
+                id='money-range-slider',
+                min=0,
+                max=50,
+                step=1,
+                value=[0, 50],
+                marks={i: f"${i}" for i in range(0, 51, 10)},
+                tooltip={"placement": "bottom", "always_visible": True}
+            ),
+            dcc.Graph(id='pricing-bar-chart')
+        ], style={'width': '30%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+
+        # Discounted Price vs Actual Earnings
+        html.Div([
+            html.H3("Discounted Price vs Actual Earnings"),
+            dcc.Graph(id='price-vs-earnings-chart', figure=fig4)
+        ], style={'width': '32%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+
+        # Revenue Trends by Top Categories
+        html.Div([
+            html.H3("Revenue Trends by Top Categories"),
+            dcc.Graph(id='revenue-trends-chart', figure=fig)
+        ], style={'width': '34%', 'display': 'inline-block', 'verticalAlign': 'top'})
+    ], style={'display': 'flex', 'justify-content': 'space-around'}),
+
+    # Fourth Row: Students Engagement Analysis
+    html.Div([
+        html.Div([
+            html.H3("Students Engagement Analysis"),
+            dcc.Dropdown(
+                id='filter-dropdown',
+                options=[
+                    {'label': 'Number of Lectures', 'value': 'num_published_lectures'},
+                    {'label': 'Number of Reviews', 'value': 'num_reviews'}
+                ],
+                value='num_published_lectures',  # Default value
+                style={'width': '50%', 'margin': '0 auto'}
+            ),
+            dcc.Graph(id='combined-scatter-plot')
+        ], style={'width': '100%', 'display': 'inline-block', 'verticalAlign': 'top'})
+    ], style={'display': 'flex', 'justify-content': 'center'})
+])
+
+
+if __name__ == '__main__':
+    app.run_server(debug=True, port = 8080)
+
+
+

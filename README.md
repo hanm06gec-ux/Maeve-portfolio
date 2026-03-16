@@ -3,7 +3,6 @@
 ### Table
 | Description | Link |
 | -- | -- |
-| Reflective blog |  https://ele.exeter.ac.uk/mod/oublog/view.php?id=3234123  |
 | Chosen Dataset | https://www.kaggle.com/datasets/jilkothari/finance-accounting-courses-udemy-13k-course/data |
 # Background to the Project
 
